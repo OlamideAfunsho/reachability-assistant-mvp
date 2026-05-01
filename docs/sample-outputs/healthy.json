@@ -1,0 +1,47 @@
+{
+  "profile": "space-acres",
+  "classification": "healthy",
+  "remediation_message": "Required listeners are present and the local environment looks healthy.",
+  "error_code": "healthy",
+  "listeners": [
+    {
+      "port": 30333,
+      "protocol": "tcp",
+      "listening": true,
+      "occupied_by_other_process": false,
+      "details": "Detected listener entries: LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:((\"subspace-node\",pid=2471,fd=9))"
+    },
+    {
+      "port": 30433,
+      "protocol": "tcp",
+      "listening": true,
+      "occupied_by_other_process": false,
+      "details": "Detected listener entries: LISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:((\"subspace-farmer\",pid=2492,fd=12))"
+    }
+  ],
+  "firewall": {
+    "supported": true,
+    "ufw_installed": true,
+    "ufw_active": true,
+    "required_ports_allowed": true,
+    "details": "Read current UFW rules and matched required Space Acres ports."
+  },
+  "network": {
+    "platform": "linux",
+    "lan_ip": "192.168.1.50",
+    "default_gateway": "192.168.1.1",
+    "public_ip": "41.190.2.4",
+    "likely_cgnat_or_double_nat": false,
+    "details": "Collected LAN, gateway, and public IP hints using common Linux commands."
+  },
+  "router_automation": {
+    "backend": "upnp_igd",
+    "available": true,
+    "attempted": false,
+    "success": true,
+    "details": "Detected a reachable UPnP IGD backend and found both required Space Acres mappings."
+  },
+  "actions_attempted": [
+
+  ]
+}

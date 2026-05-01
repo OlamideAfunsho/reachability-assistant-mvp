@@ -1,0 +1,17 @@
+Autonomys Reachability Assistant MVP
+Profile: Space Acres
+Classification: manual_router_action_required
+Next step: Local checks look good, but the router mapping still needs manual attention.
+
+Listeners:
+- Space Acres 30333/tcp | listening=true occupied_by_other_process=false | Found listener entries: LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:(("subspace-node",pid=2471,fd=9))
+- Space Acres 30433/tcp | listening=true occupied_by_other_process=false | Found listener entries: LISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:(("subspace-farmer",pid=2492,fd=12))
+
+Firewall: supported=true installed=true active=true required_ports_allowed=true
+Firewall notes: Checked current UFW rules against the Space Acres ports.
+
+Network: platform=linux lan_ip=Some("192.168.1.50") gateway=Some("192.168.1.1") public_ip=Some("41.190.2.4") likely_cgnat_or_double_nat=false
+Network notes: Collected LAN, gateway, and public IP info from the local machine.
+
+Router automation: backend=upnp_igd available=true attempted=false success=false
+Router notes: Detected a reachable UPnP IGD backend, but both Space Acres mappings are not there yet.

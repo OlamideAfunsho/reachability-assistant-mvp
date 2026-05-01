@@ -1,0 +1,52 @@
+{
+  "profile": "space-acres",
+  "classification": "missing_listener",
+  "remediation_message": "Start the Space Acres process and confirm it is listening on 30333/tcp and 30433/tcp.",
+  "error_code": "missing_listener",
+  "listeners": [
+    {
+      "port": 30333,
+      "protocol": "tcp",
+      "listening": false,
+      "occupied_by_other_process": false,
+      "details": "No TCP listener detected on port 30333."
+    },
+    {
+      "port": 30433,
+      "protocol": "tcp",
+      "listening": false,
+      "occupied_by_other_process": false,
+      "details": "No TCP listener detected on port 30433."
+    }
+  ],
+  "firewall": {
+    "supported": true,
+    "ufw_installed": true,
+    "ufw_active": true,
+    "required_ports_allowed": true,
+    "details": "Read current UFW rules and matched required Space Acres ports."
+  },
+  "network": {
+    "platform": "linux",
+    "lan_ip": "192.168.1.50",
+    "default_gateway": "192.168.1.1",
+    "public_ip": "41.190.2.4",
+    "likely_cgnat_or_double_nat": false,
+    "details": "Collected LAN, gateway, and public IP hints using common Linux commands."
+  },
+  "router_automation": {
+    "backend": "upnp_igd",
+    "available": true,
+    "attempted": false,
+    "success": false,
+    "details": "Detected a reachable UPnP IGD backend, but the required Space Acres mappings are not both present."
+  },
+  "actions_attempted": [
+    {
+      "name": "preflight",
+      "attempted": false,
+      "success": false,
+      "details": "Skipped firewall and router changes because the local service is not ready yet."
+    }
+  ]
+}

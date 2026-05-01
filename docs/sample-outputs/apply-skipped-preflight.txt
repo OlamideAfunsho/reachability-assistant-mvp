@@ -1,0 +1,21 @@
+Autonomys Reachability Assistant MVP
+Profile: Space Acres
+Classification: missing_listener
+Next step: Start Space Acres and make sure it is listening on 30333/tcp and 30433/tcp.
+
+Listeners:
+- Space Acres 30333/tcp | listening=false occupied_by_other_process=false | Nothing is listening on TCP port 30333.
+- Space Acres 30433/tcp | listening=false occupied_by_other_process=false | Nothing is listening on TCP port 30433.
+
+Firewall: supported=true installed=true active=true required_ports_allowed=true
+Firewall notes: Checked current UFW rules against the Space Acres ports.
+
+Network: platform=linux lan_ip=Some("192.168.1.50") gateway=Some("192.168.1.1") public_ip=Some("41.190.2.4") likely_cgnat_or_double_nat=false
+Network notes: Collected LAN, gateway, and public IP info from the local machine.
+
+Router automation: backend=upnp_igd available=true attempted=false success=false
+Router notes: Detected a reachable UPnP IGD backend, but both Space Acres mappings are not there yet.
+
+Actions:
+Summary: total=1 attempted=0 skipped=1 failed=0
+- preflight | attempted=false success=false | Skipped firewall and router changes because the local service is not ready yet.
