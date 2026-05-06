@@ -47,11 +47,12 @@ pub fn render_human_report(display_name: &str, report: &InspectionReport) -> Str
 
     lines.push(String::new());
     lines.push(format!(
-        "Router automation: backend={} available={} attempted={} success={}",
+        "Router automation: backend={} available={} attempted={} success={} external_ip={:?}",
         report.router_automation.backend,
         report.router_automation.available,
         report.router_automation.attempted,
-        report.router_automation.success
+        report.router_automation.success,
+        report.router_automation.external_ip
     ));
     lines.push(format!(
         "Router notes: {}",

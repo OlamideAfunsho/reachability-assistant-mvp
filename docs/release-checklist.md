@@ -10,7 +10,6 @@ Use this checklist before calling the MVP ready for handoff or public release.
 - [ ] CLI commands are documented:
 - [ ] `inspect`
 - [ ] `apply`
-- [ ] `renew`
 - [ ] `report --json`
 
 ## Sample Artifacts
@@ -21,8 +20,6 @@ Use this checklist before calling the MVP ready for handoff or public release.
 - [ ] apply healthy sample exists
 - [ ] apply skipped preflight sample exists
 - [ ] apply manual router follow-up sample exists
-- [ ] renew healthy-with-drift sample exists
-- [ ] renew manual-review sample exists
 
 ## Validation Docs
 

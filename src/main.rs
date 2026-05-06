@@ -3,7 +3,6 @@ mod cli;
 mod inspect;
 mod model;
 mod profile;
-mod renew;
 mod reporter;
 mod system;
 
@@ -35,21 +34,6 @@ fn run(cli: Cli) -> Result<i32, String> {
         Command::Apply(args) => {
             let profile = profile::load_profile(&args.role.profile)?;
             let report = apply::apply(&profile);
-            println!(
-                "{}",
-                reporter::render_human_report(profile.display_name, &report)
-            );
-            Ok(reporter::exit_code(&report))
-        }
-        Command::Renew(args) => {
-            let profile = profile::load_profile(&args.role.profile)?;
-            let report = renew::renew(
-                &profile,
-                renew::RenewContext {
-                    previous_lan_ip: args.previous_lan_ip,
-                    previous_gateway: args.previous_gateway,
-                },
-            );
             println!(
                 "{}",
                 reporter::render_human_report(profile.display_name, &report)

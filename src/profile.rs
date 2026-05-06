@@ -17,7 +17,7 @@ pub fn load_profile(id: &str) -> Result<Profile, String> {
         "space-acres" => Ok(Profile {
             id: "space-acres",
             display_name: "Space Acres",
-            process_hints: vec!["subspace", "space-acres", "farmer", "node"],
+            process_hints: vec!["subspace-node", "subspace-farmer", "space-acres"],
             required_ports: vec![
                 PortRequirement {
                     port: 30333,

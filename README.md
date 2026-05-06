@@ -9,7 +9,7 @@ Current scope:
 - UFW firewall support only
 - One router automation backend only
 - CLI only
-- Commands: `inspect`, `apply`, `renew`, `report --json`
+- Commands: `inspect`, `apply`, `report --json`
 
 ## Layout
 
@@ -29,11 +29,6 @@ Current scope:
   - attempt one router mapping method for both required Space Acres ports
   - target the detected LAN IP instead of a hardcoded loopback address
   - re-run inspection after changes
-- `src/renew.rs`
-  Lightweight renewal and drift-aware re-checks:
-  - re-attempt router mappings for the current LAN IP
-  - compare current LAN IP and gateway against previously known values when provided
-  - report drift in the final output
 - `src/model.rs`
   Report shape and fixed MVP classifications.
 - `src/main.rs`
@@ -44,7 +39,6 @@ Current scope:
 ```bash
 reachability-assistant inspect --profile space-acres
 reachability-assistant apply --profile space-acres
-reachability-assistant renew --profile space-acres --previous-lan-ip 192.168.1.50 --previous-gateway 192.168.1.1
 reachability-assistant report --profile space-acres --json
 ```
 
@@ -79,8 +73,6 @@ Saved sample outputs for the MVP deliverables live under `docs/sample-outputs/`:
 - `apply-healthy.txt` and `apply-healthy.json`
 - `apply-skipped-preflight.txt` and `apply-skipped-preflight.json`
 - `apply-manual-router-followup.txt` and `apply-manual-router-followup.json`
-- `renew-healthy-with-drift.txt` and `renew-healthy-with-drift.json`
-- `renew-manual-review.txt` and `renew-manual-review.json`
 
 Linux validation artifacts:
 

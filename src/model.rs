@@ -47,6 +47,7 @@ pub struct RouterAutomationStatus {
     pub available: bool,
     pub attempted: bool,
     pub success: bool,
+    pub external_ip: Option<String>,
     pub details: String,
 }
 
@@ -161,6 +162,7 @@ impl InspectionReport {
                 "    \"available\": {},\n",
                 "    \"attempted\": {},\n",
                 "    \"success\": {},\n",
+                "    \"external_ip\": {},\n",
                 "    \"details\": \"{}\"\n",
                 "  }},\n",
                 "  \"actions_attempted\": [\n{}\n  ]\n",
@@ -188,6 +190,7 @@ impl InspectionReport {
             self.router_automation.available,
             self.router_automation.attempted,
             self.router_automation.success,
+            option_to_json(&self.router_automation.external_ip),
             escape_json(&self.router_automation.details),
             actions_attempted
         )

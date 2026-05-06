@@ -15,8 +15,12 @@ pub(crate) fn inspect_with_runner(
 ) -> InspectionReport {
     let listeners = inspect_listeners(profile, runner);
     let firewall = inspect_firewall(profile, runner);
-    let network = inspect_network(runner);
-    let router_automation = inspect_router_backend(runner);
+    let mut network = inspect_network(runner);
+    let router_automation = inspect_router_backend(profile, network.lan_ip.as_deref(), runner);
+    network.likely_cgnat_or_double_nat = detect_upstream_restriction(
+        network.public_ip.as_deref(),
+        router_automation.external_ip.as_deref(),
+    );
 
     let classification = classify(&listeners, &firewall, &network, &router_automation);
     let remediation_message =
@@ -150,11 +154,11 @@ fn parse_firewall_status(profile: &Profile, status_output: &CommandOutput) -> Fi
 
 fn inspect_network(runner: &mut dyn FnMut(&str, &[&str]) -> CommandOutput) -> NetworkSnapshot {
     let platform = std::env::consts::OS.to_string();
-    let lan_output = runner("hostname", &["-I"]);
     let route_output = runner("ip", &["route"]);
+    let lan_output = runner("hostname", &["-I"]);
     let public_ip_output = runner("curl", &["-fsSL", "https://api.ipify.org"]);
-    let lan_ip = parse_lan_ip(&lan_output);
     let default_gateway = parse_default_gateway(&route_output.stdout);
+    let lan_ip = parse_lan_ip(&lan_output, default_gateway.as_deref());
     let public_ip = parse_public_ip(&public_ip_output);
     let likely_cgnat_or_double_nat =
         detect_upstream_restriction(lan_ip.as_deref(), public_ip.as_deref());
@@ -187,16 +191,30 @@ fn build_network_snapshot(
     }
 }
 
-fn parse_lan_ip(output: &CommandOutput) -> Option<String> {
+fn parse_lan_ip(output: &CommandOutput, default_gateway: Option<&str>) -> Option<String> {
     if !output.success {
         return None;
     }
 
-    output
+    let candidates: Vec<&str> = output
         .stdout
         .split_whitespace()
-        .find(|candidate| is_ipv4(candidate))
-        .map(|value| value.to_string())
+        .filter(|candidate| is_ipv4(candidate))
+        .collect();
+
+    if let Some(gateway) = default_gateway {
+        if let Some(gateway_prefix) = ipv4_prefix(gateway) {
+            if let Some(candidate) = candidates.iter().find(|candidate| {
+                ipv4_prefix(candidate)
+                    .map(|candidate_prefix| candidate_prefix == gateway_prefix)
+                    .unwrap_or(false)
+            }) {
+                return Some((*candidate).to_string());
+            }
+        }
+    }
+
+    candidates.first().map(|value| (*value).to_string())
 }
 
 fn parse_public_ip(output: &CommandOutput) -> Option<String> {
@@ -207,44 +225,60 @@ fn parse_public_ip(output: &CommandOutput) -> Option<String> {
     first_non_empty_line(&output.stdout).filter(|candidate| is_ipv4(candidate))
 }
 
-fn detect_upstream_restriction(lan_ip: Option<&str>, public_ip: Option<&str>) -> bool {
-    match (lan_ip, public_ip) {
+fn detect_upstream_restriction(public_ip: Option<&str>, router_external_ip: Option<&str>) -> bool {
+    match (public_ip, router_external_ip) {
+        (Some(ip), _) if is_private_ipv4(ip) => true,
         (_, Some(ip)) if is_private_ipv4(ip) => true,
-        (Some(lan), Some(public)) if lan == public => false,
-        (None, _) => false,
-        (_, None) => false,
+        (Some(public), Some(router)) => public != router,
         _ => false,
     }
 }
 
 fn inspect_router_backend(
+    profile: &Profile,
+    lan_ip: Option<&str>,
     runner: &mut dyn FnMut(&str, &[&str]) -> CommandOutput,
 ) -> RouterAutomationStatus {
     let miniupnpc_output = runner("upnpc", &["-l"]);
-    parse_router_status(&miniupnpc_output)
+    parse_router_status(&miniupnpc_output, profile, lan_ip)
 }
 
-fn parse_router_status(miniupnpc_output: &CommandOutput) -> RouterAutomationStatus {
+fn parse_router_status(
+    miniupnpc_output: &CommandOutput,
+    profile: &Profile,
+    lan_ip: Option<&str>,
+) -> RouterAutomationStatus {
     if miniupnpc_output.success {
         let lines: Vec<&str> = miniupnpc_output
             .stdout
             .lines()
             .filter(|line| !line.trim().is_empty())
             .collect();
-        let has_required_mappings =
-            has_upnp_mapping(&lines, 30333) && has_upnp_mapping(&lines, 30433);
+        let external_ip = parse_upnp_external_ip(&lines);
+        let mapping_target_ip = lan_ip.unwrap_or("");
+        let has_required_mappings = !mapping_target_ip.is_empty()
+            && profile
+                .required_ports
+                .iter()
+                .all(|requirement| has_upnp_mapping(&lines, requirement.port, mapping_target_ip));
 
         return RouterAutomationStatus {
             backend: "upnp_igd",
             available: true,
             attempted: false,
             success: has_required_mappings,
+            external_ip,
             details: if has_required_mappings {
-                "Detected a reachable UPnP IGD backend and found both required Space Acres mappings."
+                "Detected a reachable UPnP IGD backend and confirmed both required Space Acres mappings point to this machine."
+                    .to_string()
+            } else if mapping_target_ip.is_empty() {
+                "Detected a reachable UPnP IGD backend, but could not verify the target host because no LAN IP was selected."
                     .to_string()
             } else {
-                "Detected a reachable UPnP IGD backend, but both Space Acres mappings are not there yet."
-                    .to_string()
+                format!(
+                    "Detected a reachable UPnP IGD backend, but the required Space Acres mappings do not both point to {} yet.",
+                    mapping_target_ip
+                )
             },
         };
     }
@@ -254,6 +288,7 @@ fn parse_router_status(miniupnpc_output: &CommandOutput) -> RouterAutomationStat
         available: false,
         attempted: false,
         success: false,
+        external_ip: None,
         details: format!(
             "UPnP IGD backend is not available: {}",
             miniupnpc_output.stderr
@@ -360,18 +395,40 @@ fn has_ufw_allow_rule(lines: &[&str], port: u16, protocol: &str) -> bool {
     })
 }
 
-fn has_upnp_mapping(lines: &[&str], port: u16) -> bool {
-    let arrow_fragment = format!("{port}->");
-    let target_fragment = format!(":{port}");
-    let leading_fragment = format!(" {port} ");
+fn has_upnp_mapping(lines: &[&str], port: u16, lan_ip: &str) -> bool {
+    let mapping_fragment = format!("{port}->{lan_ip}:{port}");
 
     lines.iter().any(|line| {
-        let lower = line.to_lowercase();
-        lower.contains("tcp")
-            && (lower.contains(&arrow_fragment)
-                || lower.contains(&target_fragment)
-                || lower.contains(&leading_fragment))
+        let compact = line.to_lowercase().replace(' ', "");
+        compact.contains("tcp") && compact.contains(&mapping_fragment)
     })
+}
+
+fn parse_upnp_external_ip(lines: &[&str]) -> Option<String> {
+    lines.iter().find_map(|line| {
+        let trimmed = line.trim();
+        let candidate = trimmed
+            .split_once("ExternalIPAddress =")
+            .map(|(_, value)| value.trim())
+            .or_else(|| {
+                trimmed
+                    .split_once("ExternalIPAddress:")
+                    .map(|(_, value)| value.trim())
+            });
+
+        candidate
+            .filter(|value| is_ipv4(value))
+            .map(|value| value.to_string())
+    })
+}
+
+fn ipv4_prefix(ip: &str) -> Option<String> {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+
+    Some(format!("{}.{}.{}", parts[0], parts[1], parts[2]))
 }
 
 fn first_non_empty_line(value: &str) -> Option<String> {
@@ -474,6 +531,37 @@ mod tests {
                 "ss -ltnp".to_string(),
                 ok(
                     "LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:((\"nginx\",pid=1,fd=7))\nLISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:((\"subspace-node\",pid=2,fd=9))",
+                ),
+            ),
+            (
+                "ufw status".to_string(),
+                ok("Status: active\n30333/tcp ALLOW Anywhere\n30433/tcp ALLOW Anywhere"),
+            ),
+            ("hostname -I".to_string(), ok("192.168.1.50")),
+            (
+                "ip route".to_string(),
+                ok("default via 192.168.1.1 dev eth0"),
+            ),
+            (
+                "curl -fsSL https://api.ipify.org".to_string(),
+                ok("41.190.2.4"),
+            ),
+            ("upnpc -l".to_string(), ok("ExternalIPAddress = 41.190.2.4")),
+        ]));
+
+        let report = inspect_with_runner(&profile, &mut runner);
+
+        assert_eq!(report.classification, Classification::PortConflict);
+    }
+
+    #[test]
+    fn classifies_port_conflict_when_a_generic_node_process_is_listening() {
+        let profile = load_profile("space-acres").unwrap();
+        let mut runner = runner_from(HashMap::from([
+            (
+                "ss -ltnp".to_string(),
+                ok(
+                    "LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:((\"node\",pid=1,fd=7))\nLISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:((\"subspace-farmer\",pid=2,fd=9))",
                 ),
             ),
             (
@@ -613,12 +701,49 @@ mod tests {
 
     #[test]
     fn router_parser_requires_mapping_lines_not_just_port_mentions() {
-        let router = parse_router_status(&ok(
-            "ExternalIPAddress = 41.190.2.4\nKnown candidate ports: 30333, 30433",
-        ));
+        let profile = load_profile("space-acres").unwrap();
+        let router = parse_router_status(
+            &ok("ExternalIPAddress = 41.190.2.4\nKnown candidate ports: 30333, 30433"),
+            &profile,
+            Some("192.168.1.50"),
+        );
 
         assert!(router.available);
         assert!(!router.success);
+    }
+
+    #[test]
+    fn router_parser_captures_external_ip() {
+        let profile = load_profile("space-acres").unwrap();
+        let router = parse_router_status(
+            &ok("ExternalIPAddress = 41.190.2.4\n 0 TCP 30333->192.168.1.50:30333 'space-acres'"),
+            &profile,
+            Some("192.168.1.50"),
+        );
+
+        assert_eq!(router.external_ip.as_deref(), Some("41.190.2.4"));
+    }
+
+    #[test]
+    fn router_parser_rejects_mappings_that_point_to_another_machine() {
+        let profile = load_profile("space-acres").unwrap();
+        let router = parse_router_status(
+            &ok(
+                "ExternalIPAddress = 41.190.2.4\n 0 TCP 30333->192.168.1.40:30333 'space-acres'\n 1 TCP 30433->192.168.1.40:30433 'space-acres'",
+            ),
+            &profile,
+            Some("192.168.1.50"),
+        );
+
+        assert!(router.available);
+        assert!(!router.success);
+    }
+
+    #[test]
+    fn parse_lan_ip_prefers_an_address_on_the_default_gateway_subnet() {
+        let lan_ip = parse_lan_ip(&ok("172.17.0.1 192.168.1.50 10.0.0.2"), Some("192.168.1.1"));
+
+        assert_eq!(lan_ip.as_deref(), Some("192.168.1.50"));
     }
 
     #[test]
@@ -683,6 +808,77 @@ mod tests {
                 ok("100.64.1.9"),
             ),
             ("upnpc -l".to_string(), ok("ExternalIPAddress = 100.64.1.9")),
+        ]));
+
+        let report = inspect_with_runner(&profile, &mut runner);
+
+        assert_eq!(
+            report.classification,
+            Classification::LikelyUpstreamRestriction
+        );
+    }
+
+    #[test]
+    fn classifies_upstream_restriction_when_router_external_ip_is_private() {
+        let profile = load_profile("space-acres").unwrap();
+        let mut runner = runner_from(HashMap::from([
+            (
+                "ss -ltnp".to_string(),
+                ok(
+                    "LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:((\"subspace-node\",pid=2,fd=9))\nLISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:((\"subspace-farmer\",pid=3,fd=9))",
+                ),
+            ),
+            (
+                "ufw status".to_string(),
+                ok("Status: active\n30333/tcp ALLOW Anywhere\n30433/tcp ALLOW Anywhere"),
+            ),
+            ("hostname -I".to_string(), ok("192.168.1.50")),
+            (
+                "ip route".to_string(),
+                ok("default via 192.168.1.1 dev eth0"),
+            ),
+            (
+                "curl -fsSL https://api.ipify.org".to_string(),
+                ok("41.190.2.4"),
+            ),
+            ("upnpc -l".to_string(), ok("ExternalIPAddress = 100.64.1.9")),
+        ]));
+
+        let report = inspect_with_runner(&profile, &mut runner);
+
+        assert_eq!(
+            report.classification,
+            Classification::LikelyUpstreamRestriction
+        );
+    }
+
+    #[test]
+    fn classifies_upstream_restriction_when_router_external_ip_disagrees_with_public_ip() {
+        let profile = load_profile("space-acres").unwrap();
+        let mut runner = runner_from(HashMap::from([
+            (
+                "ss -ltnp".to_string(),
+                ok(
+                    "LISTEN 0 128 0.0.0.0:30333 0.0.0.0:* users:((\"subspace-node\",pid=2,fd=9))\nLISTEN 0 128 0.0.0.0:30433 0.0.0.0:* users:((\"subspace-farmer\",pid=3,fd=9))",
+                ),
+            ),
+            (
+                "ufw status".to_string(),
+                ok("Status: active\n30333/tcp ALLOW Anywhere\n30433/tcp ALLOW Anywhere"),
+            ),
+            ("hostname -I".to_string(), ok("192.168.1.50")),
+            (
+                "ip route".to_string(),
+                ok("default via 192.168.1.1 dev eth0"),
+            ),
+            (
+                "curl -fsSL https://api.ipify.org".to_string(),
+                ok("41.190.2.4"),
+            ),
+            (
+                "upnpc -l".to_string(),
+                ok("ExternalIPAddress = 203.0.113.10"),
+            ),
         ]));
 
         let report = inspect_with_runner(&profile, &mut runner);

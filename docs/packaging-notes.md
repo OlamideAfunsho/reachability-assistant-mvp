@@ -33,7 +33,6 @@ On a Linux machine with Rust installed:
 cargo build --release
 ./target/release/reachability-assistant-mvp inspect --profile space-acres
 ./target/release/reachability-assistant-mvp apply --profile space-acres
-./target/release/reachability-assistant-mvp renew --profile space-acres --previous-lan-ip 192.168.1.50 --previous-gateway 192.168.1.1
 ./target/release/reachability-assistant-mvp report --profile space-acres --json
 ```
 

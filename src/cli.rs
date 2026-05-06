@@ -7,7 +7,6 @@ pub struct Cli {
 pub enum Command {
     Inspect(RoleArgs),
     Apply(ApplyArgs),
-    Renew(RenewArgs),
     Report(ReportArgs),
 }
 
@@ -25,13 +24,6 @@ pub struct ApplyArgs {
 pub struct ReportArgs {
     pub role: RoleArgs,
     pub json: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct RenewArgs {
-    pub role: RoleArgs,
-    pub previous_lan_ip: Option<String>,
-    pub previous_gateway: Option<String>,
 }
 
 impl Cli {
@@ -52,13 +44,6 @@ impl Cli {
                     profile: parse_profile(&remaining)?,
                 },
             }),
-            "renew" => Command::Renew(RenewArgs {
-                role: RoleArgs {
-                    profile: parse_profile(&remaining)?,
-                },
-                previous_lan_ip: parse_optional_value(&remaining, "--previous-lan-ip")?,
-                previous_gateway: parse_optional_value(&remaining, "--previous-gateway")?,
-            }),
             "report" => Command::Report(ReportArgs {
                 role: RoleArgs {
                     profile: parse_profile(&remaining)?,
@@ -69,7 +54,7 @@ impl Cli {
             "--version" | "-V" => return Err("reachability-assistant-mvp 0.1.0".to_string()),
             _ => {
                 return Err(usage(
-                    "Unknown command. Expected one of: inspect, apply, renew, report",
+                    "Unknown command. Expected one of: inspect, apply, report",
                 ));
             }
         };
@@ -103,7 +88,6 @@ fn usage(error: &str) -> String {
     let body = "Usage:
   reachability-assistant inspect [--profile space-acres]
   reachability-assistant apply [--profile space-acres]
-  reachability-assistant renew [--profile space-acres] [--previous-lan-ip 192.168.1.50] [--previous-gateway 192.168.1.1]
   reachability-assistant report [--profile space-acres] [--json]
 
 MVP scope:
